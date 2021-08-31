@@ -1,0 +1,63 @@
+# ex: set filetype=yaml.ansible fenc=utf-8 expandtab ts=2 sw=2 :
+## vimf6_ansible_args: --diff
+## vimf6_ansible_args: --diff --check -vv
+## vimf6_ansible_args: --diff -i ./.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory
+## vimf6_ansible_nolocalsudo: yes
+- hosts:
+    - localhost
+  connection: local
+  gather_facts: no
+  vars:
+    grub:
+      a: GRUB_CMDLINE_LINUX="console=ttya console=ttyS0,115200n8 earlyprintk=ttyS0,115200 rootdelay=300 net.ifnames=0 scsi_mod.use_blk_mq=y"
+      b: GRUB_CMDLINE_LINUX="console=ttyb ipv6.disable=1"
+      c: GRUB_CMDLINE_LINUX="console=ttyc ipv6.disable=0"
+      d: GRUB_CMDLINE_LINUX="console=ttyd ipv6.disable=0 hehe=habon"
+      e: GRUB_CMDLINE_LINUX="console=ttye ipv6.disable=0 ipv6.disable=0"
+      f: GRUB_CMDLINE_LINUX="console=ttyf"
+      g: 'GRUB_CMDLINE_LINUX="console=ttyg" # comment'
+      h: GRUB_CMDLINE_LINUX='console=ttyh ipv6.disable=0 console=ttyS0,115200n8 earlyprintk=ttyS0,115200 rootdelay=300 net.ifnames=0 scsi_mod.use_blk_mq=y'
+      i: GRUB_CMDLINE_LINUX="console=ttyi ipv6.disable=0 console=ttyS0,115200n8 earlyprintk=ttyS0,115200 rootdelay=300 net.ifnames=0 scsi_mod.use_blk_mq=y"
+      j: GRUB_CMDLINE_LINUX="console=ttyj ipv6.disable=0 notwork=1 ipv6.disable=0"
+      k: GRUB_CMDLINE_LINUX="rd.lvm.lv=VG_root/LV_root rd.lvm.lv=VG_root/LV_swap rd.lvm.lv=VG_root/LV_usr rhgb quiet audit=1 audit_backlog_limit=8192 ipv6.disable=1 ipv6.disable=1 ipv6.disable=1"
+      l: GRUB_CMDLINE_LINUX="console=ttyi ipv6.disable=0 console=ttyS0,115200n8 earlyprintk=ttyS0,115200 ipv6.disable=1 rootdelay=300 net.ifnames=0 scsi_mod.use_blk_mq=y"
+
+  tasks:
+
+    - with_dict: "{{ grub }}"
+      changed_when: no
+      when: yes
+      no_log: yes
+      copy:
+        dest: /tmp/grub-orig-{{ item.key }}
+        content: |
+          {{ item.value }}
+
+    - with_dict: "{{ grub }}"
+      changed_when: no
+      no_log: yes
+      copy:
+        dest: /tmp/grub-{{ item.key }}
+        content: |
+          {{ item.value }}
+
+    - name: Disable IPv6 in grub
+      with_items: "{{ grub.keys() }}"
+      vars:
+        ipv6_quote: (["']?)                                # group 1
+        ipv6_before: ((?:(?<!ipv6.disable=)[^"'])*?)\s*    # group 2
+        ipv6_before_simpler: ([^"']*?)\s*                  # group 2
+        ipv6_existing: ((?:ipv6.disable=[^\s"']+\s*?)*)    # group 3
+        ipv6_after: ((?:(?<!ipv6.disable=)[^"'])*)         # group 4
+        ipv6_after_simpler: ([^"']*?)                      # group 4
+        ipv6_comments: (\s*#.*|)                           # group 5
+        ipv6_regexp: ^GRUB_CMDLINE_LINUX={{ ipv6_quote + ipv6_before_simpler + ipv6_existing + ipv6_after }}\1{{ ipv6_comments }}$
+        ipv6_replace: GRUB_CMDLINE_LINUX=\1\2\4 ipv6.disable=1\1\5
+        ipv6_replace_debug: 2)\2 3)\3 4)\4 5)\5 result: {{ ipv6_replace }}
+      lineinfile:
+        path: /tmp/grub-{{ item }}
+        regexp: "{{ ipv6_regexp }}"
+        line: "{{ ipv6_replace_debug }}"
+        backrefs: yes
+        create: no
+        mode: '0644'
